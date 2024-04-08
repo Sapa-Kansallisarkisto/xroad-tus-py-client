@@ -5,6 +5,7 @@ from urllib.parse import urljoin
 
 import requests
 import aiohttp
+import ssl
 
 from tusclient.uploader.baseuploader import BaseUploader
 
@@ -16,8 +17,7 @@ def _verify_upload(request: TusRequest):
     if 200 <= request.status_code < 300:
         return True
     else:
-        raise TusUploadFailed('', request.status_code,
-                              request.response_content)
+        raise TusUploadFailed("", request.status_code, request.response_content)
 
 
 class Uploader(BaseUploader):
@@ -51,8 +51,14 @@ class Uploader(BaseUploader):
         """
         self._retried = 0
 
+        # Ensure that we have a URL, as this is behavior we allowed previously.
+        # See https://github.com/tus/tus-py-client/issues/82.
+        if not self.url:
+            self.set_url(self.create_url())
+            self.offset = 0
+
         self._do_request()
-        self.offset = int(self.request.response_headers.get('upload-offset'))
+        self.offset = int(self.request.response_headers.get("upload-offset"))
 
     @catch_requests_error
     def create_url(self):
@@ -62,12 +68,16 @@ class Uploader(BaseUploader):
         Makes request to tus server to create a new upload url for the required file upload.
         """
         resp = requests.post(
-            self.client.url, headers=self.get_url_creation_headers(),
-            verify=self.verify_tls_cert)
+            self.client.url,
+            headers=self.get_url_creation_headers(),
+            verify=self.verify_tls_cert,
+            cert=self.client_cert,
+        )
         url = resp.headers.get("location")
         if url is None:
-            msg = 'Attempt to retrieve create file url with status {}'.format(
-                resp.status_code)
+            msg = "Attempt to retrieve create file url with status {}".format(
+                resp.status_code
+            )
             raise TusCommunicationError(msg, resp.status_code, resp.content)
         return urljoin(self.client.url, url)
 
@@ -125,8 +135,14 @@ class AsyncUploader(BaseUploader):
         """
         self._retried = 0
 
+        # Ensure that we have a URL, as this is behavior we allowed previously.
+        # See https://github.com/tus/tus-py-client/issues/82.
+        if not self.url:
+            self.set_url(await self.create_url())
+            self.offset = 0
+
         await self._do_request()
-        self.offset = int(self.request.response_headers.get('upload-offset'))
+        self.offset = int(self.request.response_headers.get("upload-offset"))
 
     async def create_url(self):
         """
@@ -135,16 +151,29 @@ class AsyncUploader(BaseUploader):
         Makes request to tus server to create a new upload url for the required file upload.
         """
         try:
-            async with aiohttp.ClientSession() as session:
+            ssl_ctx = ssl.create_default_context()
+            if (self.client_cert is not None):
+                if self.client_cert is str:
+                    ssl_ctx.load_cert_chain(certfile=self.client_cert)
+                else:
+                    ssl_ctx.load_cert_chain(certfile=self.client_cert[0], keyfile=self.client_cert[1])
+            conn = aiohttp.TCPConnector(ssl=ssl_ctx)
+            async with aiohttp.ClientSession(connector=conn) as session:
                 headers = self.get_url_creation_headers()
-                ssl = None if self.verify_tls_cert else False
+                verify_tls_cert = None if self.verify_tls_cert else False
                 async with session.post(
-                        self.client.url, headers=headers, ssl=ssl) as resp:
+                    self.client.url, headers=headers, ssl=verify_tls_cert
+                ) as resp:
                     url = resp.headers.get("location")
                     if url is None:
-                        msg = 'Attempt to retrieve create file url with status {}'.format(
-                            resp.status)
-                        raise TusCommunicationError(msg, resp.status, await resp.content.read())
+                        msg = (
+                            "Attempt to retrieve create file url with status {}".format(
+                                resp.status
+                            )
+                        )
+                        raise TusCommunicationError(
+                            msg, resp.status, await resp.content.read()
+                        )
                     return urljoin(self.client.url, url)
         except aiohttp.ClientError as error:
             raise TusCommunicationError(error)

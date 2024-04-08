@@ -5,6 +5,7 @@ from functools import wraps
 
 import requests
 import aiohttp
+import ssl
 
 from tusclient.exceptions import TusUploadFailed, TusCommunicationError
 
@@ -12,6 +13,7 @@ from tusclient.exceptions import TusUploadFailed, TusCommunicationError
 # Catches requests exceptions and throws custom tuspy errors.
 def catch_requests_error(func):
     """Deocrator to catch requests exceptions"""
+
     @wraps(func)
     def _wrapper(*args, **kwargs):
         try:
@@ -45,10 +47,11 @@ class BaseTusRequest:
         self.verify_tls_cert = bool(uploader.verify_tls_cert)
         self.file = uploader.get_file_stream()
         self.file.seek(uploader.offset)
+        self.client_cert = uploader.client_cert
 
         self._request_headers = {
-            'upload-offset': str(uploader.offset),
-            'Content-Type': 'application/offset+octet-stream'
+            "upload-offset": str(uploader.offset),
+            "Content-Type": "application/offset+octet-stream",
         }
         self._request_headers.update(uploader.get_headers())
         self._content_length = uploader.get_request_length()
@@ -58,17 +61,19 @@ class BaseTusRequest:
 
     def add_checksum(self, chunk: bytes):
         if self._upload_checksum:
-            self._request_headers['upload-checksum'] = \
-                ' '.join((
+            self._request_headers["upload-checksum"] = " ".join(
+                (
                     self._checksum_algorithm_name,
-                    base64.b64encode(
-                        self._checksum_algorithm(chunk).digest()
-                    ).decode('ascii'),
-                ))
+                    base64.b64encode(self._checksum_algorithm(chunk).digest()).decode(
+                        "ascii"
+                    ),
+                )
+            )
 
 
 class TusRequest(BaseTusRequest):
     """Class to handle async Tus upload requests"""
+
     def perform(self):
         """
         Perform actual request.
@@ -76,20 +81,27 @@ class TusRequest(BaseTusRequest):
         try:
             chunk = self.file.read(self._content_length)
             self.add_checksum(chunk)
-            resp = requests.patch(self._url, data=chunk,
-                                  headers=self._request_headers,
-                                  verify=self.verify_tls_cert)
+            resp = requests.patch(
+                self._url,
+                data=chunk,
+                headers=self._request_headers,
+                verify=self.verify_tls_cert,
+                stream=True,
+                cert=self.client_cert
+            )
             self.status_code = resp.status_code
             self.response_content = resp.content
-            self.response_headers = {
-                k.lower(): v for k, v in resp.headers.items()}
+            self.response_headers = {k.lower(): v for k, v in resp.headers.items()}
         except requests.exceptions.RequestException as error:
             raise TusUploadFailed(error)
 
 
 class AsyncTusRequest(BaseTusRequest):
     """Class to handle async Tus upload requests"""
-    def __init__(self, *args, io_loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs):
+
+    def __init__(
+        self, *args, io_loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs
+    ):
         self.io_loop = io_loop
         super().__init__(*args, **kwargs)
 
@@ -100,14 +112,22 @@ class AsyncTusRequest(BaseTusRequest):
         chunk = self.file.read(self._content_length)
         self.add_checksum(chunk)
         try:
-            async with aiohttp.ClientSession(loop=self.io_loop) as session:
-                ssl = None if self.verify_tls_cert else False
+            ssl_ctx = ssl.create_default_context()
+            if (self.client_cert is not None):
+                if self.client_cert is str:
+                    ssl_ctx.load_cert_chain(certfile=self.client_cert)
+                else:
+                    ssl_ctx.load_cert_chain(certfile=self.client_cert[0], keyfile=self.client_cert[1])
+            conn = aiohttp.TCPConnector(ssl=ssl_ctx)
+            async with aiohttp.ClientSession(loop=self.io_loop, connector=conn) as session:
+                verify_tls_cert = None if self.verify_tls_cert else False
                 async with session.patch(
-                        self._url, data=chunk, headers=self._request_headers,
-                        ssl=ssl) as resp:
+                    self._url, data=chunk, headers=self._request_headers, ssl=verify_tls_cert
+                ) as resp:
                     self.status_code = resp.status
                     self.response_headers = {
-                        k.lower(): v for k, v in resp.headers.items()}
+                        k.lower(): v for k, v in resp.headers.items()
+                    }
                     self.response_content = await resp.content.read()
         except aiohttp.ClientError as error:
             raise TusUploadFailed(error)
