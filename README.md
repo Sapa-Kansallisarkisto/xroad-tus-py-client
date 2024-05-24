@@ -1,4 +1,4 @@
-# tus-py-client [![Build Status](https://github.com/tus/tus-py-client/actions/workflows/CI.yml/badge.svg)](https://github.com/tus/tus-py-client/actions/workflows/CI.yml)
+# xroad-tus-py-client [![Build Status](https://github.com/tulmil/xroad-tus-py-client/actions/workflows/CI.yml/badge.svg)](https://github.com/tulmil/xroad-tus-py-client/actions/workflows/CI.yml)
 
 > **tus** is a protocol based on HTTP for _resumable file uploads_. Resumable
 > means that an upload can be interrupted at any moment and can be resumed without
@@ -6,19 +6,41 @@
 > the user wants to pause, or by accident in case of a network issue or server
 > outage.
 
-**tus-py-client** is a Python client for uploading files using the _tus_ protocol to any remote server supporting it.
+**xroad-tus-py-client** is a Python client for uploading files using the _tus_ protocol to any remote server supporting it.
 
 ## Documentation
 
-See documentation here: http://tus-py-client.readthedocs.io/en/latest/
+Based on *tus-py-client* with added client certificate functionality for eg. X-Road authentication.
+See original documentation here: http://tus-py-client.readthedocs.io/en/latest/
 
 ## Get started
 
 ```bash
-pip install tuspy
+pip install .
 ```
 
-Now you are ready to use the api.
+There is a command line example client for SAPA uploads via X-Road: **tusclient/scripts/sapa_xroad_tus_client.py**
+Here is a quick usage example:
+
+```bash
+
+python sapa_xroad_tus_client.py \
+--target_url=<X-Road target URL> \
+--xroad_client=<X-Road client path string> \
+--xroad_client_cert=<Your client certificate file deposited on the X-Road server> \
+--xroad_client_key=<Your client certificate key file for the certificate> \
+--api_key=<SAPA API key> \
+--file=<File to upload> \
+--package_type=<SAPA package type> \
+--ahaa_series_id=<SAPA series ID> \
+--transfer_oid=<SAPA transfer ID URN> \
+--email_notify_to=<Optional email for notification> \
+--verify
+
+```
+---
+
+To use the api:
 
 ```python
 from tusclient import client
@@ -26,10 +48,11 @@ from tusclient import client
 # Set Authorization headers if it is required
 # by the tus server.
 my_client = client.TusClient('http://tusd.tusdemo.net/files/',
-                              headers={'Authorization': 'Basic xxyyZZAAbbCC='})
+                              headers={'Authorization': 'Basic xxyyZZAAbbCC='},
+                              client_cert=['clientcert.pem', 'clientprivatekey.pem'])
 
-# Set more headers.
-my_client.set_headers({'HEADER_NAME': 'HEADER_VALUE'})
+# Set more headers, in this case the X-Road-Client header.
+my_client.set_headers({'X-Road-Client': 'AA/BB/CC/DD'})
 
 uploader = my_client.uploader('path/to/file.ext', chunk_size=200)
 

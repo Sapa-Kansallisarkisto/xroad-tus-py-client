@@ -5,13 +5,13 @@ import tusclient
 setup(
     name='tuspy',
     version=tusclient.__version__,
-    url='http://github.com/tus/tus-py-client/',
+    url='http://github.com/tulmil/xroad-tus-py-client/',
     license='MIT',
-    author='Ifedapo Olarewaju',
     install_requires=[
         'requests>=2.18.4',
         'tinydb>=3.5.0',
-        'aiohttp>=3.6.2'
+        'aiohttp>=3.6.2',
+        'click>=8.0'
     ],
     extras_require={
         'test': [
@@ -28,8 +28,7 @@ setup(
             'Sphinx==1.7.1'
         ]
     },
-    author_email='ifedapoolarewaju@gmail.com',
-    description='A Python client for the tus resumable upload protocol ->  http://tus.io',
+    description='A Python client for X-Road and the tus resumable upload protocol ->  http://tus.io',
     long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     packages=['tusclient', 'tusclient.fingerprint', 'tusclient.storage', 'tusclient.uploader'],

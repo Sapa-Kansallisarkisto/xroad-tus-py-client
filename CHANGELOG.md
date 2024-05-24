@@ -1,3 +1,6 @@
+### 1.0.4 / 2024-05-24
+- Add sapa_xroad_tus_client.py
+
 ### 1.0.3 / 2023-12-13
 
 - Add explicit test fixtures to fix tests on Windows by @nhairs in https://github.com/tus/tus-py-client/pull/91
