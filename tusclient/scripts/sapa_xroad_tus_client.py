@@ -16,10 +16,11 @@ The certificate must be added in the X-Road UI (usually on port 4000) at
 SAPA:
   You require the following information before you can upload:
     package_type
-    ahaa_series_id
     transfer_oid
-    digitization_rationale, IF package is a digitization package
+    ahaa_series_id (Only if package is a Sähke2-package)
+    digitization_rationale (Only if package is a digitization package)
 
+  The MD5 checksum (package_checksum) is calculated automatically.
 """
 import sys
 import click
